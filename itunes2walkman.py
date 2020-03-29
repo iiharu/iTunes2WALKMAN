@@ -8,18 +8,21 @@ import plistlib
 import shutil
 import os
 import urllib
+from tqdm import tqdm
 
 
 def load(args):
     # type: (argparse.Namespace) -> str, Dict[int, str], Dict[str, List[int]]
     """
     Load PLIST
+    # music_folder -> $HOME/Music/Music/Media.localized
+    # tracks: (107, )
     """
 
     # Load Plist
     plist = plistlib.readPlist(args.plist)
     scheme = 'file://'
-    music_folder = plist['Music Folder'][len(scheme):]  # type: str
+    music_folder = os.path.join(plist['Music Folder'][len(scheme):], 'Music/')
     tracks = {int(key): urllib.url2pathname(
         val['Location'][(len(scheme) + len(music_folder)):]) for key, val in plist['Tracks'].items()}  # type: Dict[int, str]
     playlists = {d['Name']: [t['Track ID']
@@ -31,19 +34,30 @@ def load(args):
 def copy(args, music_folder, tracks):
     # type: (argparse.Namespace, str, Dict[int, str])
 
-    for _, f in tracks.items():
+    print('Copy Items...')
+    for _, f in tqdm(tracks.items()):
         src = music_folder + f
-        dst = os.path.join(args.output, 'Music', f)
+        dst = os.path.join(args.output, 'MUSIC', f)
         if not os.path.exists(src):
-            print(src, 'is not found')
-        # Make Dir if not exist
+            print('No such file or directroy:', src)
+            print(f)
+            return
         if not os.path.exists(os.path.dirname(dst)):
-            os.makedirs(os.path.dirname(dst))
+            try:
+                os.makedirs(os.path.dirname(dst))
+            except OSError as e:
+                print('mkdir failed:', os.path.dirname(dst))
+                # print(e)
+                return
         if os.path.exists(dst):
             continue
         # Copy Music File
-        shutil.copy(src, dst)
-        shutil.copystat(src, dst)
+        try:
+            shutil.copy(src, dst)
+            shutil.copystat(src, dst)
+        except Exception as e:
+            print(e)
+            return
 
     return
 
@@ -54,9 +68,10 @@ def dump(args, tracks, playlists):
     Dumps Playlists
     """
 
-    dst = os.path.join(args.output, 'Music')
+    dst = os.path.join(args.output, 'MUSIC')
 
-    for name, lst in playlists.items():
+    print('Dump Playlists...')
+    for name, lst in tqdm(playlists.items()):
         fp = os.path.join(dst, name + '.M3U8')
         with open(fp, 'w') as f:
             f.write('#EXTM3U\n')
